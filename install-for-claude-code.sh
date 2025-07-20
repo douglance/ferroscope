@@ -90,7 +90,7 @@ cat > INSTALLATION_SUMMARY.md << 'EOF'
 
 ## 🚀 You're Ready!
 
-Claude Code can now debug Rust programs with real LLDB/GDB integration!
+Claude Code can now debug Rust programs with LLDB/GDB integration!
 EOF
 
 echo "✅ Created INSTALLATION_SUMMARY.md"

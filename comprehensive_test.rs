@@ -4,12 +4,12 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
 /**
- * COMPREHENSIVE DEBUGGER VALIDATION TEST
+ * FERROSCOPE COMPREHENSIVE VALIDATION TEST
  * 
  * Tests all critical functionality that was previously broken:
- * 1. ✅ Programs actually load (not just pretend)
+ * 1. ✅ Programs load and initialize properly
  * 2. ✅ Process launch works (not just "continue")  
- * 3. ✅ Breakpoints are real and functional
+ * 3. ✅ Breakpoints work correctly
  * 4. ✅ State management tracks program lifecycle
  * 5. ✅ Error handling works properly
  * 6. ✅ Session management and cleanup
@@ -24,7 +24,7 @@ struct ComprehensiveTestSuite {
 
 impl ComprehensiveTestSuite {
     fn new() -> Result<Self> {
-        println!("🧪 COMPREHENSIVE DEBUGGER TEST SUITE");
+        println!("🧪 FERROSCOPE COMPREHENSIVE TEST SUITE");
         println!("🎯 Testing all critical functionality that was previously broken");
         println!();
 
@@ -149,7 +149,7 @@ impl ComprehensiveTestSuite {
             .ok_or_else(|| anyhow::anyhow!("No output field"))?;
 
         if !output.contains("Current executable set to") {
-            anyhow::bail!("No real LLDB output found");
+            anyhow::bail!("No LLDB output found");
         }
 
         Ok(())
@@ -171,7 +171,7 @@ impl ComprehensiveTestSuite {
             .ok_or_else(|| anyhow::anyhow!("No output field"))?;
 
         if !output.contains("Breakpoint 1:") {
-            anyhow::bail!("No real breakpoint output found");
+            anyhow::bail!("No breakpoint output found");
         }
 
         Ok(())
@@ -255,7 +255,7 @@ impl ComprehensiveTestSuite {
     }
 
     fn run_comprehensive_test_suite(&mut self) -> bool {
-        println!("🧪 COMPREHENSIVE DEBUGGER VALIDATION");
+        println!("🧪 FERROSCOPE COMPREHENSIVE VALIDATION");
         println!("{}", "=".repeat(60));
         println!("Testing all functionality that was previously broken:");
         println!();
@@ -273,8 +273,8 @@ impl ComprehensiveTestSuite {
         }
 
         test!("Server initialization (v2.0)", test_initialization);
-        test!("Program loading with real binary", test_program_loading);
-        test!("Breakpoint setting with real LLDB", test_breakpoint_setting);
+        test!("Program loading with binary", test_program_loading);
+        test!("Breakpoint setting with LLDB", test_breakpoint_setting);
         test!("Process launch (not just continue)", test_process_launch);
         test!("State management and tracking", test_state_management);
         test!("Error handling for invalid inputs", test_error_handling);
@@ -286,10 +286,10 @@ impl ComprehensiveTestSuite {
         println!("   ❌ Failed: {}/{}", total - passed, total);
         
         if passed == total {
-            println!("   🎉 ALL TESTS PASSED! Debugger functionality verified!");
+            println!("   🎉 ALL TESTS PASSED! Ferroscope functionality verified!");
             true
         } else {
-            println!("   ⚠️  Some tests failed. Debugger needs more fixes.");
+            println!("   ⚠️  Some tests failed. Ferroscope needs more fixes.");
             false
         }
     }
@@ -323,11 +323,11 @@ fn main() -> Result<()> {
 
     println!();
     if all_passed {
-        println!("🚀 DEBUGGER VALIDATION: SUCCESS");
-        println!("The debugger now provides real debugging functionality!");
+        println!("🚀 FERROSCOPE VALIDATION: SUCCESS");
+        println!("Ferroscope now provides full debugging functionality!");
         println!("Ready for Gemini validation.");
     } else {
-        println!("🔧 DEBUGGER VALIDATION: NEEDS MORE WORK");
+        println!("🔧 FERROSCOPE VALIDATION: NEEDS MORE WORK");
         println!("Some critical functionality is still broken.");
     }
 

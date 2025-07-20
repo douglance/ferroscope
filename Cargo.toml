@@ -1,10 +1,16 @@
 [package]
 name = "ferroscope"
 version = "0.1.0"
-edition = "2024"
-description = "MCP server for debugging Rust programs with GDB/LLDB"
-license = "MIT OR Apache-2.0"
+edition = "2021"
+description = "MCP server that enables AI assistants to debug Rust programs using LLDB and GDB"
+license = "MIT"
 repository = "https://github.com/douglance/ferroscope"
+homepage = "https://github.com/douglance/ferroscope"
+documentation = "https://docs.rs/ferroscope"
+readme = "README.md"
+keywords = ["debugging", "rust", "mcp", "ai", "lldb"]
+categories = ["development-tools::debugging", "development-tools"]
+authors = ["douglance"]
 
 [[bin]]
 name = "ferroscope"

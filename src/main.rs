@@ -6,50 +6,155 @@ use tokio::sync::Mutex;
 use tokio::process::{Child, ChildStdin, ChildStdout};
 use std::process::Stdio;
 
-/**
- * PRODUCTION-GRADE RUST DEBUG MCP SERVER v2.0
- * 
- * Implements comprehensive debugging with proper state management,
- * process lifecycle control, and robust error handling.
- * 
- * Key Features:
- * - Programs actually run (not just loaded)
- * - Real variable inspection during execution
- * - Crash detection and handling
- * - Robust response parsing (no timeouts)
- * - Proper session management
- */
+//! # Ferroscope
+//! 
+//! A Model Context Protocol (MCP) server that enables AI assistants to debug Rust programs
+//! using LLDB and GDB debuggers.
+//! 
+//! ## Overview
+//! 
+//! Ferroscope bridges the gap between AI assistants and native debugging tools, allowing
+//! AI agents to perform debugging tasks like setting breakpoints, stepping through code,
+//! and inspecting variables in running Rust programs.
+//! 
+//! ## Features
+//! 
+//! - **Native debugging**: Uses LLDB (macOS) and GDB (Linux) debuggers
+//! - **MCP Protocol**: Implements Model Context Protocol for AI assistant integration
+//! - **10 debugging tools**: Complete workflow from loading to stepping through code
+//! - **State management**: Tracks debugging session state and program lifecycle
+//! - **Cross-platform**: Works on macOS and Linux (Windows support planned)
+//! 
+//! ## Available Tools
+//! 
+//! - `debug_run` - Load and prepare Rust programs for debugging
+//! - `debug_break` - Set breakpoints at functions or lines
+//! - `debug_continue` - Launch/continue program execution
+//! - `debug_step` - Step through code line by line
+//! - `debug_step_into` - Step into function calls
+//! - `debug_step_out` - Step out of current function
+//! - `debug_eval` - Evaluate expressions and inspect variables
+//! - `debug_backtrace` - Show call stack
+//! - `debug_list_breakpoints` - List all breakpoints
+//! - `debug_state` - Get current debugging session state
+//! 
+//! ## Usage
+//! 
+//! Ferroscope is designed to be used by AI assistants through the MCP protocol.
+//! It runs as a server that accepts JSON-RPC commands over stdin/stdout.
+//! 
+//! ```bash
+//! # Install ferroscope
+//! cargo install ferroscope
+//! 
+//! # Run the MCP server
+//! ferroscope
+//! ```
+//! 
+//! ## Example Debugging Workflow
+//! 
+//! 1. Load a Rust program: `debug_run /path/to/project`
+//! 2. Set breakpoints: `debug_break main`
+//! 3. Start execution: `debug_continue`
+//! 4. At breakpoints: `debug_eval variable_name`
+//! 5. Step through code: `debug_step`
+//! 
+//! ## Security Considerations
+//! 
+//! ⚠️ **Security Warning**: Ferroscope runs with full user privileges and can execute
+//! arbitrary code through the debugger. Only use with trusted code and in secure environments.
+//! 
+//! ## Requirements
+//! 
+//! - Rust toolchain
+//! - LLDB (macOS) or GDB (Linux)
+//! - Debug symbols in target binaries
 
+/// Represents the current state of a debugging session.
+/// 
+/// The debug state tracks the lifecycle of a program being debugged,
+/// from initial loading through execution and completion.
 #[derive(Debug, Clone, PartialEq)]
 enum DebugState {
+    /// No program has been loaded for debugging
     NotLoaded,
+    /// Program is loaded but not yet running
     Loaded,
+    /// Program is currently executing
     Running,
+    /// Program execution is paused (e.g., at a breakpoint)
     Stopped,
+    /// Program crashed or encountered an error
     Crashed,
+    /// Program execution completed successfully
     Completed,
 }
 
+/// Represents an active debugging session with a spawned debugger process.
+/// 
+/// A `DebugSession` manages the communication with an LLDB or GDB process,
+/// tracking the state of the debugging session and the program being debugged.
 struct DebugSession {
+    /// The spawned debugger process (LLDB or GDB)
     process: Child,
+    /// Standard input pipe to send commands to the debugger
     stdin: ChildStdin,
+    /// Buffered reader for the debugger's standard output
     stdout: BufReader<ChildStdout>,
+    /// Current state of the debugging session
     state: DebugState,
+    /// Path to the binary being debugged
     binary_path: String,
+    /// Current location in the program (file:line or function name)
     current_location: Option<String>,
 }
 
+/// The main MCP server that handles debugging requests from AI assistants.
+/// 
+/// `DebugServer` implements the Model Context Protocol, accepting JSON-RPC commands
+/// over stdin/stdout and managing debugging sessions through LLDB or GDB.
+/// 
+/// ## Thread Safety
+/// 
+/// The server uses `Arc<Mutex<_>>` to safely share the debugging session across
+/// async tasks, ensuring only one debugging operation can occur at a time.
 struct DebugServer {
+    /// The current debugging session, if any
     session: Arc<Mutex<Option<DebugSession>>>,
 }
 
 impl DebugServer {
+    /// Creates a new debug server instance.
+    /// 
+    /// The server starts with no active debugging session. Sessions are created
+    /// when the `debug_run` tool is called with a binary path.
     fn new() -> Self {
         Self {
             session: Arc::new(Mutex::new(None)),
         }
     }
 
+    /// Sends a command to the active debugger process and returns the response.
+    /// 
+    /// This method handles communication with the underlying LLDB or GDB process,
+    /// including timeout handling and response parsing.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `command` - The debugger command to execute (e.g., "breakpoint set", "continue")
+    /// 
+    /// # Returns
+    /// 
+    /// Returns the debugger's response as a string, or an error if no session is active
+    /// or if the command fails.
+    /// 
+    /// # Errors
+    /// 
+    /// This function will return an error if:
+    /// - No debugging session is currently active
+    /// - The debugger process has terminated
+    /// - Communication with the debugger fails
+    /// - The command times out (after 10 seconds)
     async fn send_debugger_command(&self, command: &str) -> Result<String> {
         let mut session_guard = self.session.lock().await;
         
@@ -175,6 +280,39 @@ impl DebugServer {
         None
     }
 
+    /// Loads and prepares a Rust program for debugging.
+    /// 
+    /// This is the primary tool for starting a debugging session. It can accept either
+    /// a path to a compiled binary or a path to a Rust project directory. If given a
+    /// directory, it will automatically build the project using `cargo build`.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `binary_path` - Path to a compiled binary or Rust project directory
+    /// 
+    /// # Returns
+    /// 
+    /// Returns a JSON response indicating success or failure of loading the program.
+    /// 
+    /// # Examples
+    /// 
+    /// Loading a Rust project directory:
+    /// ```json
+    /// {"name": "debug_run", "arguments": {"binary_path": "./my_rust_project"}}
+    /// ```
+    /// 
+    /// Loading a compiled binary:
+    /// ```json
+    /// {"name": "debug_run", "arguments": {"binary_path": "./target/debug/my_program"}}
+    /// ```
+    /// 
+    /// # Errors
+    /// 
+    /// This function will return an error if:
+    /// - The binary path does not exist
+    /// - Building the Rust project fails (for directory paths)
+    /// - Starting the debugger process fails
+    /// - The debugger cannot load the binary
     async fn debug_run(&self, binary_path: &str) -> Result<Value> {
         // Clean up any existing session
         {
@@ -290,6 +428,37 @@ impl DebugServer {
         }))
     }
 
+    /// Sets a breakpoint at the specified function or line.
+    /// 
+    /// Breakpoints pause program execution when reached, allowing inspection
+    /// of variables and program state at that point.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `location` - Function name (e.g., "main") or file:line (e.g., "src/main.rs:10")
+    /// 
+    /// # Returns
+    /// 
+    /// Returns a JSON response indicating whether the breakpoint was successfully set.
+    /// 
+    /// # Examples
+    /// 
+    /// Setting a breakpoint on the main function:
+    /// ```json
+    /// {"name": "debug_break", "arguments": {"location": "main"}}
+    /// ```
+    /// 
+    /// Setting a breakpoint at a specific line:
+    /// ```json
+    /// {"name": "debug_break", "arguments": {"location": "src/main.rs:25"}}
+    /// ```
+    /// 
+    /// # Errors
+    /// 
+    /// This function will return an error if:
+    /// - No debugging session is active
+    /// - The debugger communication fails
+    /// - The specified location cannot be resolved
     async fn debug_break(&self, location: &str) -> Result<Value> {
         let command = format!("breakpoint set --name {}", location);
         let response = self.send_debugger_command(&command).await?;
@@ -462,6 +631,44 @@ impl DebugServer {
         }))
     }
 
+    /// Evaluates an expression in the current debugging context.
+    /// 
+    /// This tool allows inspection of variables, calling functions, and evaluating
+    /// arbitrary expressions at the current program state. The program must be
+    /// stopped (e.g., at a breakpoint) for evaluation to work.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `expression` - The expression to evaluate (variable name, function call, etc.)
+    /// 
+    /// # Returns
+    /// 
+    /// Returns a JSON response with the evaluation result or an error message.
+    /// 
+    /// # Examples
+    /// 
+    /// Inspecting a variable:
+    /// ```json
+    /// {"name": "debug_eval", "arguments": {"expression": "my_variable"}}
+    /// ```
+    /// 
+    /// Evaluating a complex expression:
+    /// ```json
+    /// {"name": "debug_eval", "arguments": {"expression": "my_struct.field + 42"}}
+    /// ```
+    /// 
+    /// # Errors
+    /// 
+    /// This function will return an error if:
+    /// - No debugging session is active
+    /// - The program is not currently stopped at a breakpoint
+    /// - The expression cannot be evaluated in the current context
+    /// - The debugger communication fails
+    /// 
+    /// # Security Warning
+    /// 
+    /// ⚠️ This function can execute arbitrary code through the expression evaluator.
+    /// Only use with trusted expressions and in secure environments.
     async fn debug_eval(&self, expression: &str) -> Result<Value> {
         let current_state = {
             let session_guard = self.session.lock().await;
@@ -558,6 +765,19 @@ impl DebugServer {
     }
 
     // MCP Protocol Implementation
+    
+    /// Handles the MCP initialize request from AI assistants.
+    /// 
+    /// This method implements the Model Context Protocol initialization handshake,
+    /// announcing the server's capabilities and protocol version to the AI assistant.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `_params` - Initialization parameters from the client (currently unused)
+    /// 
+    /// # Returns
+    /// 
+    /// Returns a JSON response with server capabilities and version information.
     async fn handle_initialize(&self, _params: Value) -> Value {
         json!({
             "protocolVersion": "2024-11-05",
@@ -776,8 +996,8 @@ impl DebugServer {
         let reader = BufReader::new(stdin);
         let mut lines = reader.lines();
 
-        println!("🦀 Rust Debug MCP Server v2.0 - Production Ready");
-        eprintln!("🚀 Server starting with enhanced debugging capabilities...");
+        println!("🦀 Ferroscope v2.0 - Production Ready Rust Debugging MCP Server");
+        eprintln!("🚀 Ferroscope starting with enhanced debugging capabilities...");
 
         while let Some(line) = lines.next_line().await? {
             if line.trim().is_empty() {

@@ -1,59 +1,89 @@
 # Ferroscope
 
-**🎯 AI agents can now debug Rust programs as intuitively as writing a single character.**
+MCP server that enables AI assistants to debug Rust programs using LLDB and GDB.
 
-A **pure Rust** implementation of a Model Context Protocol (MCP) server that provides AI agents with debugging capabilities through simple JSON-RPC commands over stdio.
+## Quick Start
 
-## Features
-
-✅ **Real debugging**: Actual LLDB/GDB integration, not mock responses  
-✅ **Cross-platform**: Works with LLDB (macOS) and GDB (Linux)  
-✅ **10 debugging tools**: Complete debugging workflow  
-✅ **Global installation**: Use anywhere with `cargo install ferroscope`  
-✅ **Claude Code ready**: Includes MCP configuration  
-
-## Installation
+### 1. Install
 
 ```bash
-# Install from crates.io
 cargo install ferroscope
+```
 
-# Or build from source
+<details>
+<summary>Alternative: Build from source</summary>
+
+```bash
 git clone https://github.com/douglance/ferroscope.git
 cd ferroscope
 cargo install --path .
 ```
+</details>
 
-## Usage
+### 2. Configure Your AI Assistant
 
-Once installed, ferroscope runs as an MCP server that communicates via JSON-RPC over stdio:
-
-```bash
-# Run the MCP server
-ferroscope
-
-# Test with a simple command
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | ferroscope
-```
-
-## Claude Code Integration
-
-Add this to your Claude Code MCP settings:
+Add this to your AI assistant's MCP settings:
 
 ```json
 {
   "mcpServers": {
-    "rust-debugger": {
+    "ferroscope": {
       "command": "ferroscope",
       "args": [],
       "env": {},
-      "description": "Rust debugging tools via LLDB/GDB"
+      "description": "Rust debugging via LLDB/GDB"
     }
   }
 }
 ```
 
-Then restart Claude Code and ask: *"Debug this Rust program"*
+### 3. Add Custom Instructions
+
+Copy this snippet to your AI assistant's custom instructions:
+
+```markdown
+When debugging Rust programs, use ferroscope with this workflow:
+1. Load program: debug_run /path/to/project
+2. Set breakpoints: debug_break main or debug_break src/main.rs:25
+3. Start execution: debug_continue
+4. At breakpoints: debug_eval variable_name to inspect values
+5. Step through: debug_step (over), debug_step_into (into), debug_step_out (out)
+6. Check state: debug_state to see current status
+7. View stack: debug_backtrace when errors occur
+
+Always start with debug_run, then set breakpoints before debug_continue.
+```
+
+### 4. Start Debugging
+
+Ask your AI assistant: "Debug this Rust program" and it will use ferroscope automatically.
+
+## Configuration by AI Assistant
+
+### Claude Code
+The configuration above works for Claude Code. Add it to Settings → MCP Servers, then restart.
+
+### Cursor
+Add to `.cursor/config.json`:
+```json
+{"tools": {"ferroscope": {"command": "ferroscope", "description": "Debug Rust programs"}}}
+```
+
+### Windsurf  
+Add to tools configuration:
+```json
+{"customTools": [{"name": "ferroscope", "command": "ferroscope", "type": "mcp"}]}
+```
+
+### Zed
+Add to `~/.config/zed/settings.json`:
+```json
+{"assistant": {"tools": {"ferroscope": {"command": "ferroscope", "args": []}}}}
+```
+
+### Other AI Assistants
+
+For any MCP-compatible AI assistant, the command is `ferroscope`. Check your assistant's documentation for "MCP tools" or "external tools".
 
 ## Available Tools
 
@@ -68,36 +98,43 @@ Then restart Claude Code and ask: *"Debug this Rust program"*
 9. **`debug_list_breakpoints`** - List all breakpoints
 10. **`debug_state`** - Get current debugging session state
 
-## JSON-RPC Usage
-
-```bash
-# Initialize and debug a program
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"debug_run","arguments":{"binary_path":"./my_project"}}}' | ferroscope
-```
-
 ## Requirements
 
 - Rust toolchain
 - LLDB (macOS) or GDB (Linux)
+- Windows not currently supported (WinDbg integration planned)
 
 ## Verification
 
-After installation, verify ferroscope is working:
+Check ferroscope is installed and working:
 
 ```bash
-# Check it's installed
+# Verify installation
 which ferroscope
 
-# Run the comprehensive test suite (if built from source)
+# Test basic functionality
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | ferroscope
+
+# Run test suite (if built from source)
 cargo run --bin comprehensive-test
+# Expected output:
+# 🧪 FERROSCOPE COMPREHENSIVE TEST SUITE
+# ✅ MCP Protocol Test: PASSED
+# ✅ Program Loading Test: PASSED
+# ✅ Breakpoint Test: PASSED
+# ... (more tests)
+# 🎉 ALL TESTS PASSED! Ferroscope functionality verified!
 ```
 
-## What You Get
+## Limitations
 
-After installing ferroscope, you'll have:
-- A global `ferroscope` command available in your terminal
-- Full LLDB/GDB debugging capabilities accessible via JSON-RPC
-- Claude Code integration for AI-powered debugging
-- Support for all major Rust debugging workflows
+- **Security**: Currently runs with full user privileges without sandboxing. Only use with trusted code.
+- **Platform Support**: Windows is not supported (WinDbg integration planned)
+- **Performance**: No connection pooling or resource limits for concurrent debugging sessions
+- **Error Recovery**: Limited error handling for malformed debugger output
+- **Binary Types**: Only supports Rust binaries compiled with debug symbols
+- **Debugger Versions**: Tested with LLDB 15+ and GDB 12+
+
+---
 
 **Ready to debug Rust programs with AI!** 🦀
