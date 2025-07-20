@@ -1,5 +1,9 @@
 # Ferroscope
 
+[![CI](https://github.com/douglance/ferroscope/workflows/CI/badge.svg)](https://github.com/douglance/ferroscope/actions)
+[![Crates.io](https://img.shields.io/crates/v/ferroscope.svg)](https://crates.io/crates/ferroscope)
+[![Documentation](https://docs.rs/ferroscope/badge.svg)](https://docs.rs/ferroscope)
+
 MCP server that enables AI assistants to debug Rust programs using LLDB and GDB.
 
 ## Quick Start
