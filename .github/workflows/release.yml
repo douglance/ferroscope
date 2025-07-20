@@ -1,0 +1,228 @@
+name: Release and Publish
+
+on:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (patch, minor, major, or specific version like 1.2.3)'
+        required: true
+        default: 'patch'
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Check if we should create a release
+  check-release:
+    name: Check if release needed
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check.outputs.should-release }}
+      release-type: ${{ steps.check.outputs.release-type }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check commit message for release indicators
+      id: check
+      run: |
+        # Check if manually triggered with version input
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "should-release=true" >> $GITHUB_OUTPUT
+          echo "release-type=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Check commit messages for conventional commit patterns
+        COMMIT_MSG=$(git log -1 --pretty=%B)
+        echo "Latest commit: $COMMIT_MSG"
+        
+        # Check for breaking changes (major release)
+        if echo "$COMMIT_MSG" | grep -q "BREAKING CHANGE\|!:" || echo "$COMMIT_MSG" | grep -qE "^[a-z]+(\(.+\))?!:"; then
+          echo "should-release=true" >> $GITHUB_OUTPUT
+          echo "release-type=major" >> $GITHUB_OUTPUT
+        # Check for features (minor release)
+        elif echo "$COMMIT_MSG" | grep -qE "^feat(\(.+\))?:"; then
+          echo "should-release=true" >> $GITHUB_OUTPUT
+          echo "release-type=minor" >> $GITHUB_OUTPUT
+        # Check for fixes (patch release)
+        elif echo "$COMMIT_MSG" | grep -qE "^fix(\(.+\))?:"; then
+          echo "should-release=true" >> $GITHUB_OUTPUT
+          echo "release-type=patch" >> $GITHUB_OUTPUT
+        # Check for explicit release request
+        elif echo "$COMMIT_MSG" | grep -qi "release\|publish"; then
+          echo "should-release=true" >> $GITHUB_OUTPUT
+          echo "release-type=patch" >> $GITHUB_OUTPUT
+        else
+          echo "should-release=false" >> $GITHUB_OUTPUT
+          echo "No release indicators found in commit message"
+        fi
+
+  # Run full test suite before releasing
+  test:
+    name: Full Test Suite
+    needs: check-release
+    if: needs.check-release.outputs.should-release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [1.87.0]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo index
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo build
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install debugger (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y gdb
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+    - name: Build
+      run: cargo build --verbose
+
+    - name: Run tests
+      run: cargo test --verbose
+
+    - name: Build examples
+      run: |
+        cd examples/simple_counter
+        cargo build
+        cd ../..
+
+    - name: Check publish (dry run)
+      if: matrix.os == 'ubuntu-latest'
+      run: cargo publish --dry-run
+
+  # Create release and publish
+  release:
+    name: Create Release and Publish
+    needs: [check-release, test]
+    if: needs.check-release.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.87.0
+
+    - name: Install cargo-release
+      run: cargo install cargo-release
+
+    - name: Configure git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Determine version bump
+      id: version
+      run: |
+        RELEASE_TYPE="${{ needs.check-release.outputs.release-type }}"
+        echo "Release type: $RELEASE_TYPE"
+        
+        # If it's a specific version (like 1.2.3), use it directly
+        if [[ "$RELEASE_TYPE" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+          echo "version=$RELEASE_TYPE" >> $GITHUB_OUTPUT
+        else
+          echo "version=$RELEASE_TYPE" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Release
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        echo "Creating release with version: $VERSION"
+        
+        # Use cargo-release to bump version, create tag, and publish
+        if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+          # Specific version provided
+          cargo release --execute --no-confirm "$VERSION"
+        else
+          # Semantic release type (patch, minor, major)
+          cargo release --execute --no-confirm "$VERSION"
+        fi
+
+    - name: Get new version
+      id: new_version
+      run: |
+        NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "Released version: $NEW_VERSION"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ steps.new_version.outputs.new_version }}
+        name: Release v${{ steps.new_version.outputs.new_version }}
+        body: |
+          ## Changes
+          
+          This release was automatically created based on commit messages following conventional commit format.
+          
+          ### Installation
+          
+          ```bash
+          cargo install ferroscope
+          ```
+          
+          ### What's Changed
+          
+          See the commit history for detailed changes: https://github.com/douglance/ferroscope/compare/v${{ steps.previous_version.outputs.version }}...v${{ steps.new_version.outputs.new_version }}
+          
+          **Full Changelog**: https://github.com/douglance/ferroscope/compare/v${{ steps.previous_version.outputs.version }}...v${{ steps.new_version.outputs.new_version }}
+        draft: false
+        prerelease: false
+
+  # Notify on Discord/Slack if configured
+  notify:
+    name: Notify Release
+    needs: [release]
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Notify success
+      run: |
+        echo "🎉 Successfully released ferroscope to crates.io!"
+        echo "Published version: ${{ needs.release.outputs.new_version }}"

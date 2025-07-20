@@ -158,6 +158,16 @@ cargo run --bin comprehensive-test
 - **Binary Types**: Only supports Rust binaries compiled with debug symbols
 - **Debugger Versions**: Tested with LLDB 15+ and GDB 12+
 
+## Development and Releases
+
+Ferroscope uses automated semantic versioning based on conventional commits. New versions are automatically published to crates.io when:
+
+- **Fixes** are merged (patch release: 0.1.1 → 0.1.2)
+- **Features** are added (minor release: 0.1.1 → 0.2.0)  
+- **Breaking changes** occur (major release: 0.1.1 → 1.0.0)
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and release process details.
+
 ---
 
 **Ready to debug Rust programs with AI!** 🦀
