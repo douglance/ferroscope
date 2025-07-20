@@ -58,6 +58,12 @@ When debugging Rust programs, use ferroscope with this workflow:
 Always start with debug_run, then set breakpoints before debug_continue.
 ```
 
+**For advanced debugging with optimized context usage**, append our best practices to your CLAUDE.md:
+
+```bash
+curl -s https://raw.githubusercontent.com/douglance/ferroscope/main/best-practices.md >> CLAUDE.md
+```
+
 ### 4. Start Debugging
 
 Ask your AI assistant: "Debug this Rust program" and it will use ferroscope automatically.
