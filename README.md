@@ -60,30 +60,49 @@ Ask your AI assistant: "Debug this Rust program" and it will use ferroscope auto
 
 ## Configuration by AI Assistant
 
-### Claude Code
+<details>
+<summary><strong>Claude Code</strong></summary>
+
 The configuration above works for Claude Code. Add it to Settings → MCP Servers, then restart.
 
-### Cursor
+</details>
+
+<details>
+<summary><strong>Cursor</strong></summary>
+
 Add to `.cursor/config.json`:
 ```json
 {"tools": {"ferroscope": {"command": "ferroscope", "description": "Debug Rust programs"}}}
 ```
 
-### Windsurf  
+</details>
+
+<details>
+<summary><strong>Windsurf</strong></summary>
+
 Add to tools configuration:
 ```json
 {"customTools": [{"name": "ferroscope", "command": "ferroscope", "type": "mcp"}]}
 ```
 
-### Zed
+</details>
+
+<details>
+<summary><strong>Zed</strong></summary>
+
 Add to `~/.config/zed/settings.json`:
 ```json
 {"assistant": {"tools": {"ferroscope": {"command": "ferroscope", "args": []}}}}
 ```
 
-### Other AI Assistants
+</details>
+
+<details>
+<summary><strong>Other AI Assistants</strong></summary>
 
 For any MCP-compatible AI assistant, the command is `ferroscope`. Check your assistant's documentation for "MCP tools" or "external tools".
+
+</details>
 
 ## Available Tools
 
