@@ -1,32 +1,24 @@
-use anyhow::Result;
-use serde_json::{json, Value};
-use std::sync::Arc;
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::Mutex;
-use tokio::process::{Child, ChildStdin, ChildStdout};
-use std::process::Stdio;
-
 //! # Ferroscope
-//! 
+//!
 //! A Model Context Protocol (MCP) server that enables AI assistants to debug Rust programs
 //! using LLDB and GDB debuggers.
-//! 
+//!
 //! ## Overview
-//! 
+//!
 //! Ferroscope bridges the gap between AI assistants and native debugging tools, allowing
 //! AI agents to perform debugging tasks like setting breakpoints, stepping through code,
 //! and inspecting variables in running Rust programs.
-//! 
+//!
 //! ## Features
-//! 
+//!
 //! - **Native debugging**: Uses LLDB (macOS) and GDB (Linux) debuggers
 //! - **MCP Protocol**: Implements Model Context Protocol for AI assistant integration
 //! - **10 debugging tools**: Complete workflow from loading to stepping through code
 //! - **State management**: Tracks debugging session state and program lifecycle
 //! - **Cross-platform**: Works on macOS and Linux (Windows support planned)
-//! 
+//!
 //! ## Available Tools
-//! 
+//!
 //! - `debug_run` - Load and prepare Rust programs for debugging
 //! - `debug_break` - Set breakpoints at functions or lines
 //! - `debug_continue` - Launch/continue program execution
@@ -37,41 +29,49 @@ use std::process::Stdio;
 //! - `debug_backtrace` - Show call stack
 //! - `debug_list_breakpoints` - List all breakpoints
 //! - `debug_state` - Get current debugging session state
-//! 
+//!
 //! ## Usage
-//! 
+//!
 //! Ferroscope is designed to be used by AI assistants through the MCP protocol.
 //! It runs as a server that accepts JSON-RPC commands over stdin/stdout.
-//! 
+//!
 //! ```bash
 //! # Install ferroscope
 //! cargo install ferroscope
-//! 
+//!
 //! # Run the MCP server
 //! ferroscope
 //! ```
-//! 
+//!
 //! ## Example Debugging Workflow
-//! 
+//!
 //! 1. Load a Rust program: `debug_run /path/to/project`
 //! 2. Set breakpoints: `debug_break main`
 //! 3. Start execution: `debug_continue`
 //! 4. At breakpoints: `debug_eval variable_name`
 //! 5. Step through code: `debug_step`
-//! 
+//!
 //! ## Security Considerations
-//! 
+//!
 //! ⚠️ **Security Warning**: Ferroscope runs with full user privileges and can execute
 //! arbitrary code through the debugger. Only use with trusted code and in secure environments.
-//! 
+//!
 //! ## Requirements
-//! 
+//!
 //! - Rust toolchain
 //! - LLDB (macOS) or GDB (Linux)
 //! - Debug symbols in target binaries
 
+use anyhow::Result;
+use serde_json::{json, Value};
+use std::process::Stdio;
+use std::sync::Arc;
+use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStdin, ChildStdout};
+use tokio::sync::Mutex;
+
 /// Represents the current state of a debugging session.
-/// 
+///
 /// The debug state tracks the lifecycle of a program being debugged,
 /// from initial loading through execution and completion.
 #[derive(Debug, Clone, PartialEq)]
@@ -91,7 +91,7 @@ enum DebugState {
 }
 
 /// Represents an active debugging session with a spawned debugger process.
-/// 
+///
 /// A `DebugSession` manages the communication with an LLDB or GDB process,
 /// tracking the state of the debugging session and the program being debugged.
 struct DebugSession {
@@ -110,12 +110,12 @@ struct DebugSession {
 }
 
 /// The main MCP server that handles debugging requests from AI assistants.
-/// 
+///
 /// `DebugServer` implements the Model Context Protocol, accepting JSON-RPC commands
 /// over stdin/stdout and managing debugging sessions through LLDB or GDB.
-/// 
+///
 /// ## Thread Safety
-/// 
+///
 /// The server uses `Arc<Mutex<_>>` to safely share the debugging session across
 /// async tasks, ensuring only one debugging operation can occur at a time.
 struct DebugServer {
@@ -125,7 +125,7 @@ struct DebugServer {
 
 impl DebugServer {
     /// Creates a new debug server instance.
-    /// 
+    ///
     /// The server starts with no active debugging session. Sessions are created
     /// when the `debug_run` tool is called with a binary path.
     fn new() -> Self {
@@ -135,21 +135,21 @@ impl DebugServer {
     }
 
     /// Sends a command to the active debugger process and returns the response.
-    /// 
+    ///
     /// This method handles communication with the underlying LLDB or GDB process,
     /// including timeout handling and response parsing.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `command` - The debugger command to execute (e.g., "breakpoint set", "continue")
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns the debugger's response as a string, or an error if no session is active
     /// or if the command fails.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// This function will return an error if:
     /// - No debugging session is currently active
     /// - The debugger process has terminated
@@ -157,27 +157,27 @@ impl DebugServer {
     /// - The command times out (after 10 seconds)
     async fn send_debugger_command(&self, command: &str) -> Result<String> {
         let mut session_guard = self.session.lock().await;
-        
+
         if let Some(session) = session_guard.as_mut() {
             // Send command to debugger
             session.stdin.write_all(command.as_bytes()).await?;
             session.stdin.write_all(b"\n").await?;
             session.stdin.flush().await?;
-            
+
             // Read response with intelligent parsing
             let mut response = String::new();
             let mut line = String::new();
-            
+
             let timeout_duration = std::time::Duration::from_secs(10);
             let start_time = std::time::Instant::now();
-            
+
             loop {
                 // Check for timeout
                 if start_time.elapsed() > timeout_duration {
                     response.push_str("[TIMEOUT - Command may still be processing]");
                     break;
                 }
-                
+
                 // Try to read a line with timeout
                 tokio::select! {
                     result = session.stdout.read_line(&mut line) => {
@@ -185,12 +185,12 @@ impl DebugServer {
                             Ok(0) => break, // EOF
                             Ok(_) => {
                                 response.push_str(&line);
-                                
+
                                 // Intelligent response detection based on command type
                                 if self.is_response_complete(&line, command) {
                                     break;
                                 }
-                                
+
                                 line.clear();
                             }
                             Err(_) => break,
@@ -202,10 +202,10 @@ impl DebugServer {
                     }
                 }
             }
-            
+
             // Update session state based on response
             self.update_session_state(&response, session).await;
-            
+
             Ok(response)
         } else {
             Err(anyhow::anyhow!("No active debugger session"))
@@ -217,32 +217,32 @@ impl DebugServer {
         if line.trim() == "(lldb)" {
             return true;
         }
-        
+
         // Command-specific completion detection
         if command.starts_with("process launch") {
             if line.contains("Process") && (line.contains("launched") || line.contains("stopped")) {
                 return true;
             }
         }
-        
+
         if command.starts_with("process continue") {
             if line.contains("Process") && (line.contains("stopped") || line.contains("exited")) {
                 return true;
             }
         }
-        
+
         if command.starts_with("breakpoint set") {
             if line.contains("Breakpoint") && line.contains(":") {
                 return true;
             }
         }
-        
+
         if command.starts_with("expression") || command.starts_with("frame variable") {
             if line.contains("=") || line.contains("error:") {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -253,10 +253,13 @@ impl DebugServer {
             session.state = DebugState::Stopped;
         } else if response.contains("Process") && response.contains("exited") {
             session.state = DebugState::Completed;
-        } else if response.contains("crashed") || response.contains("SIGSEGV") || response.contains("SIGABRT") {
+        } else if response.contains("crashed")
+            || response.contains("SIGSEGV")
+            || response.contains("SIGABRT")
+        {
             session.state = DebugState::Crashed;
         }
-        
+
         // Extract current location if available
         if response.contains("stop reason") {
             // Parse location from LLDB stop output
@@ -281,33 +284,33 @@ impl DebugServer {
     }
 
     /// Loads and prepares a Rust program for debugging.
-    /// 
+    ///
     /// This is the primary tool for starting a debugging session. It can accept either
     /// a path to a compiled binary or a path to a Rust project directory. If given a
     /// directory, it will automatically build the project using `cargo build`.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `binary_path` - Path to a compiled binary or Rust project directory
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a JSON response indicating success or failure of loading the program.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// Loading a Rust project directory:
     /// ```json
     /// {"name": "debug_run", "arguments": {"binary_path": "./my_rust_project"}}
     /// ```
-    /// 
+    ///
     /// Loading a compiled binary:
     /// ```json
     /// {"name": "debug_run", "arguments": {"binary_path": "./target/debug/my_program"}}
     /// ```
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// This function will return an error if:
     /// - The binary path does not exist
     /// - Building the Rust project fails (for directory paths)
@@ -368,11 +371,14 @@ impl DebugServer {
             .join("target")
             .join("debug")
             .join(project_name);
-        
+
         if binary_path.exists() {
             Ok(binary_path.to_string_lossy().to_string())
         } else {
-            Err(anyhow::anyhow!("Built binary not found at {:?}", binary_path))
+            Err(anyhow::anyhow!(
+                "Built binary not found at {:?}",
+                binary_path
+            ))
         }
     }
 
@@ -382,12 +388,18 @@ impl DebugServer {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        
+
         let mut child = cmd.spawn()?;
-        
+
         // Get stdin/stdout handles
-        let stdin = child.stdin.take().ok_or_else(|| anyhow::anyhow!("Failed to get stdin"))?;
-        let stdout = child.stdout.take().ok_or_else(|| anyhow::anyhow!("Failed to get stdout"))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdin"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout"))?;
         let stdout_reader = BufReader::new(stdout);
 
         // Create session
@@ -410,8 +422,10 @@ impl DebugServer {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         // Load the binary
-        let load_response = self.send_debugger_command(&format!("target create \"{}\"", binary_path)).await?;
-        
+        let load_response = self
+            .send_debugger_command(&format!("target create \"{}\"", binary_path))
+            .await?;
+
         // Update state
         {
             let mut session_guard = self.session.lock().await;
@@ -429,32 +443,32 @@ impl DebugServer {
     }
 
     /// Sets a breakpoint at the specified function or line.
-    /// 
+    ///
     /// Breakpoints pause program execution when reached, allowing inspection
     /// of variables and program state at that point.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `location` - Function name (e.g., "main") or file:line (e.g., "src/main.rs:10")
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a JSON response indicating whether the breakpoint was successfully set.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// Setting a breakpoint on the main function:
     /// ```json
     /// {"name": "debug_break", "arguments": {"location": "main"}}
     /// ```
-    /// 
+    ///
     /// Setting a breakpoint at a specific line:
     /// ```json
     /// {"name": "debug_break", "arguments": {"location": "src/main.rs:25"}}
     /// ```
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// This function will return an error if:
     /// - No debugging session is active
     /// - The debugger communication fails
@@ -462,9 +476,9 @@ impl DebugServer {
     async fn debug_break(&self, location: &str) -> Result<Value> {
         let command = format!("breakpoint set --name {}", location);
         let response = self.send_debugger_command(&command).await?;
-        
+
         let success = !response.contains("no locations") && !response.contains("error:");
-        
+
         Ok(json!({
             "success": success,
             "output": response.trim(),
@@ -476,32 +490,35 @@ impl DebugServer {
         // Check current state
         let current_state = {
             let session_guard = self.session.lock().await;
-            session_guard.as_ref().map(|s| s.state.clone()).unwrap_or(DebugState::NotLoaded)
+            session_guard
+                .as_ref()
+                .map(|s| s.state.clone())
+                .unwrap_or(DebugState::NotLoaded)
         };
 
         let command = match current_state {
             DebugState::Loaded => {
                 // First time - need to launch the program
                 "process launch"
-            },
+            }
             DebugState::Stopped => {
                 // Program is stopped at breakpoint - continue execution
                 "process continue"
-            },
+            }
             DebugState::Running => {
                 return Ok(json!({
                     "success": false,
                     "error": "Program is already running",
                     "state": "running"
                 }));
-            },
+            }
             DebugState::Completed | DebugState::Crashed => {
                 return Ok(json!({
                     "success": false,
                     "error": "Program has finished execution",
                     "state": format!("{:?}", current_state).to_lowercase()
                 }));
-            },
+            }
             DebugState::NotLoaded => {
                 return Ok(json!({
                     "success": false,
@@ -512,7 +529,7 @@ impl DebugServer {
         };
 
         let response = self.send_debugger_command(command).await?;
-        
+
         // Get updated state
         let (new_state, location) = {
             let session_guard = self.session.lock().await;
@@ -534,7 +551,10 @@ impl DebugServer {
     async fn debug_step(&self) -> Result<Value> {
         let current_state = {
             let session_guard = self.session.lock().await;
-            session_guard.as_ref().map(|s| s.state.clone()).unwrap_or(DebugState::NotLoaded)
+            session_guard
+                .as_ref()
+                .map(|s| s.state.clone())
+                .unwrap_or(DebugState::NotLoaded)
         };
 
         if current_state != DebugState::Stopped {
@@ -546,7 +566,7 @@ impl DebugServer {
         }
 
         let response = self.send_debugger_command("thread step-over").await?;
-        
+
         // Get updated state and location
         let (new_state, location) = {
             let session_guard = self.session.lock().await;
@@ -568,7 +588,10 @@ impl DebugServer {
     async fn debug_step_into(&self) -> Result<Value> {
         let current_state = {
             let session_guard = self.session.lock().await;
-            session_guard.as_ref().map(|s| s.state.clone()).unwrap_or(DebugState::NotLoaded)
+            session_guard
+                .as_ref()
+                .map(|s| s.state.clone())
+                .unwrap_or(DebugState::NotLoaded)
         };
 
         if current_state != DebugState::Stopped {
@@ -580,7 +603,7 @@ impl DebugServer {
         }
 
         let response = self.send_debugger_command("thread step-in").await?;
-        
+
         let (new_state, location) = {
             let session_guard = self.session.lock().await;
             if let Some(session) = session_guard.as_ref() {
@@ -601,7 +624,10 @@ impl DebugServer {
     async fn debug_step_out(&self) -> Result<Value> {
         let current_state = {
             let session_guard = self.session.lock().await;
-            session_guard.as_ref().map(|s| s.state.clone()).unwrap_or(DebugState::NotLoaded)
+            session_guard
+                .as_ref()
+                .map(|s| s.state.clone())
+                .unwrap_or(DebugState::NotLoaded)
         };
 
         if current_state != DebugState::Stopped {
@@ -613,7 +639,7 @@ impl DebugServer {
         }
 
         let response = self.send_debugger_command("thread step-out").await?;
-        
+
         let (new_state, location) = {
             let session_guard = self.session.lock().await;
             if let Some(session) = session_guard.as_ref() {
@@ -632,47 +658,50 @@ impl DebugServer {
     }
 
     /// Evaluates an expression in the current debugging context.
-    /// 
+    ///
     /// This tool allows inspection of variables, calling functions, and evaluating
     /// arbitrary expressions at the current program state. The program must be
     /// stopped (e.g., at a breakpoint) for evaluation to work.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `expression` - The expression to evaluate (variable name, function call, etc.)
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a JSON response with the evaluation result or an error message.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// Inspecting a variable:
     /// ```json
     /// {"name": "debug_eval", "arguments": {"expression": "my_variable"}}
     /// ```
-    /// 
+    ///
     /// Evaluating a complex expression:
     /// ```json
     /// {"name": "debug_eval", "arguments": {"expression": "my_struct.field + 42"}}
     /// ```
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// This function will return an error if:
     /// - No debugging session is active
     /// - The program is not currently stopped at a breakpoint
     /// - The expression cannot be evaluated in the current context
     /// - The debugger communication fails
-    /// 
+    ///
     /// # Security Warning
-    /// 
+    ///
     /// ⚠️ This function can execute arbitrary code through the expression evaluator.
     /// Only use with trusted expressions and in secure environments.
     async fn debug_eval(&self, expression: &str) -> Result<Value> {
         let current_state = {
             let session_guard = self.session.lock().await;
-            session_guard.as_ref().map(|s| s.state.clone()).unwrap_or(DebugState::NotLoaded)
+            session_guard
+                .as_ref()
+                .map(|s| s.state.clone())
+                .unwrap_or(DebugState::NotLoaded)
         };
 
         if current_state != DebugState::Stopped {
@@ -686,14 +715,14 @@ impl DebugServer {
         // Try both expression and frame variable commands
         let expr_cmd = format!("expression {}", expression);
         let frame_cmd = format!("frame variable {}", expression);
-        
+
         // Try expression first
         let response = self.send_debugger_command(&expr_cmd).await?;
-        
+
         if response.contains("error:") || response.contains("undeclared identifier") {
             // Try frame variable as fallback
             let frame_response = self.send_debugger_command(&frame_cmd).await?;
-            
+
             let success = !frame_response.contains("error:");
             Ok(json!({
                 "success": success,
@@ -715,7 +744,10 @@ impl DebugServer {
     async fn debug_backtrace(&self) -> Result<Value> {
         let current_state = {
             let session_guard = self.session.lock().await;
-            session_guard.as_ref().map(|s| s.state.clone()).unwrap_or(DebugState::NotLoaded)
+            session_guard
+                .as_ref()
+                .map(|s| s.state.clone())
+                .unwrap_or(DebugState::NotLoaded)
         };
 
         if current_state != DebugState::Stopped {
@@ -727,7 +759,7 @@ impl DebugServer {
         }
 
         let response = self.send_debugger_command("thread backtrace").await?;
-        
+
         Ok(json!({
             "success": true,
             "output": response.trim()
@@ -736,7 +768,7 @@ impl DebugServer {
 
     async fn debug_list_breakpoints(&self) -> Result<Value> {
         let response = self.send_debugger_command("breakpoint list").await?;
-        
+
         Ok(json!({
             "success": true,
             "output": response.trim()
@@ -750,7 +782,7 @@ impl DebugServer {
                 (
                     session.state.clone(),
                     session.current_location.clone(),
-                    Some(session.binary_path.clone())
+                    Some(session.binary_path.clone()),
                 )
             } else {
                 (DebugState::NotLoaded, None, None)
@@ -765,18 +797,18 @@ impl DebugServer {
     }
 
     // MCP Protocol Implementation
-    
+
     /// Handles the MCP initialize request from AI assistants.
-    /// 
+    ///
     /// This method implements the Model Context Protocol initialization handshake,
     /// announcing the server's capabilities and protocol version to the AI assistant.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `_params` - Initialization parameters from the client (currently unused)
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a JSON response with server capabilities and version information.
     async fn handle_initialize(&self, _params: Value) -> Value {
         json!({
@@ -912,18 +944,10 @@ impl DebugServer {
                     .ok_or_else(|| anyhow::anyhow!("location required"))?;
                 self.debug_break(location).await
             }
-            "debug_continue" => {
-                self.debug_continue().await
-            }
-            "debug_step" => {
-                self.debug_step().await
-            }
-            "debug_step_into" => {
-                self.debug_step_into().await
-            }
-            "debug_step_out" => {
-                self.debug_step_out().await
-            }
+            "debug_continue" => self.debug_continue().await,
+            "debug_step" => self.debug_step().await,
+            "debug_step_into" => self.debug_step_into().await,
+            "debug_step_out" => self.debug_step_out().await,
             "debug_eval" => {
                 let expression = arguments
                     .get("expression")
@@ -931,15 +955,9 @@ impl DebugServer {
                     .ok_or_else(|| anyhow::anyhow!("expression required"))?;
                 self.debug_eval(expression).await
             }
-            "debug_backtrace" => {
-                self.debug_backtrace().await
-            }
-            "debug_list_breakpoints" => {
-                self.debug_list_breakpoints().await
-            }
-            "debug_state" => {
-                self.get_debug_state().await
-            }
+            "debug_backtrace" => self.debug_backtrace().await,
+            "debug_list_breakpoints" => self.debug_list_breakpoints().await,
+            "debug_state" => self.get_debug_state().await,
             _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),
         }
     }
@@ -955,7 +973,7 @@ impl DebugServer {
             "tools/call" => {
                 let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
                 let arguments = params.get("arguments").cloned().unwrap_or(Value::Null);
-                
+
                 match self.handle_call_tool(name, arguments).await {
                     Ok(result) => Ok(json!({
                         "content": [
@@ -968,13 +986,13 @@ impl DebugServer {
                     Err(e) => Err(json!({
                         "code": -32602,
                         "message": format!("Tool execution failed: {}", e)
-                    }))
+                    })),
                 }
             }
             _ => Err(json!({
                 "code": -32601,
                 "message": format!("Method not found: {}", method)
-            }))
+            })),
         };
 
         match result {
@@ -984,10 +1002,10 @@ impl DebugServer {
                 "result": result
             }),
             Err(error) => json!({
-                "jsonrpc": "2.0", 
+                "jsonrpc": "2.0",
                 "id": id,
                 "error": error
-            })
+            }),
         }
     }
 

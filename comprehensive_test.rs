@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 
 /**
  * FERROSCOPE COMPREHENSIVE VALIDATION TEST
- * 
+ *
  * Tests all critical functionality that was previously broken:
  * 1. ✅ Programs load and initialize properly
  * 2. ✅ Process launch works (not just "continue")  
@@ -48,7 +48,7 @@ impl ComprehensiveTestSuite {
 
     fn send_request(&mut self, method: &str, params: Value) -> Result<Value> {
         self.request_id += 1;
-        
+
         let request = json!({
             "jsonrpc": "2.0",
             "id": self.request_id,
@@ -61,7 +61,7 @@ impl ComprehensiveTestSuite {
 
         let mut response_line = String::new();
         self.stdout.read_line(&mut response_line)?;
-        
+
         let response: Value = serde_json::from_str(&response_line.trim())?;
         Ok(response)
     }
@@ -73,7 +73,7 @@ impl ComprehensiveTestSuite {
         });
 
         let response = self.send_request("tools/call", params)?;
-        
+
         if let Some(result) = response.get("result") {
             if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
                 if let Some(text) = content[0].get("text").and_then(|t| t.as_str()) {
@@ -82,18 +82,18 @@ impl ComprehensiveTestSuite {
                 }
             }
         }
-        
+
         if let Some(error) = response.get("error") {
             anyhow::bail!("Command failed: {}", error);
         }
-        
+
         anyhow::bail!("Unexpected response: {:?}", response);
     }
 
     fn run_test(&mut self, test_name: &str, test_fn: impl FnOnce(&mut Self) -> Result<()>) -> bool {
         print!("🔍 Testing {}: ", test_name);
         std::io::stdout().flush().unwrap();
-        
+
         match test_fn(self) {
             Ok(()) => {
                 println!("✅ PASSED");
@@ -107,16 +107,22 @@ impl ComprehensiveTestSuite {
     }
 
     fn test_initialization(&mut self) -> Result<()> {
-        let response = self.send_request("initialize", json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {}
-        }))?;
+        let response = self.send_request(
+            "initialize",
+            json!({
+                "protocolVersion": "2024-11-05",
+                "capabilities": {}
+            }),
+        )?;
 
-        let server_info = response.get("result")
+        let server_info = response
+            .get("result")
             .and_then(|r| r.get("serverInfo"))
             .ok_or_else(|| anyhow::anyhow!("No server info"))?;
 
-        let name = server_info.get("name").and_then(|n| n.as_str())
+        let name = server_info
+            .get("name")
+            .and_then(|n| n.as_str())
             .ok_or_else(|| anyhow::anyhow!("No server name"))?;
 
         if name != "ferroscope" {
@@ -127,25 +133,34 @@ impl ComprehensiveTestSuite {
     }
 
     fn test_program_loading(&mut self) -> Result<()> {
-        let result = self.debug_command("debug_run", json!({
-            "binary_path": "./examples/simple_counter"
-        }))?;
+        let result = self.debug_command(
+            "debug_run",
+            json!({
+                "binary_path": "./examples/simple_counter"
+            }),
+        )?;
 
-        let success = result.get("success").and_then(|s| s.as_bool())
+        let success = result
+            .get("success")
+            .and_then(|s| s.as_bool())
             .ok_or_else(|| anyhow::anyhow!("No success field"))?;
 
         if !success {
             anyhow::bail!("Program loading failed");
         }
 
-        let state = result.get("state").and_then(|s| s.as_str())
+        let state = result
+            .get("state")
+            .and_then(|s| s.as_str())
             .ok_or_else(|| anyhow::anyhow!("No state field"))?;
 
         if state != "loaded" {
             anyhow::bail!("Expected 'loaded' state, got: {}", state);
         }
 
-        let output = result.get("output").and_then(|o| o.as_str())
+        let output = result
+            .get("output")
+            .and_then(|o| o.as_str())
             .ok_or_else(|| anyhow::anyhow!("No output field"))?;
 
         if !output.contains("Current executable set to") {
@@ -156,18 +171,25 @@ impl ComprehensiveTestSuite {
     }
 
     fn test_breakpoint_setting(&mut self) -> Result<()> {
-        let result = self.debug_command("debug_break", json!({
-            "location": "main"
-        }))?;
+        let result = self.debug_command(
+            "debug_break",
+            json!({
+                "location": "main"
+            }),
+        )?;
 
-        let success = result.get("success").and_then(|s| s.as_bool())
+        let success = result
+            .get("success")
+            .and_then(|s| s.as_bool())
             .ok_or_else(|| anyhow::anyhow!("No success field"))?;
 
         if !success {
             anyhow::bail!("Breakpoint setting failed");
         }
 
-        let output = result.get("output").and_then(|o| o.as_str())
+        let output = result
+            .get("output")
+            .and_then(|o| o.as_str())
             .ok_or_else(|| anyhow::anyhow!("No output field"))?;
 
         if !output.contains("Breakpoint 1:") {
@@ -180,14 +202,18 @@ impl ComprehensiveTestSuite {
     fn test_process_launch(&mut self) -> Result<()> {
         let result = self.debug_command("debug_continue", json!({}))?;
 
-        let success = result.get("success").and_then(|s| s.as_bool())
+        let success = result
+            .get("success")
+            .and_then(|s| s.as_bool())
             .ok_or_else(|| anyhow::anyhow!("No success field"))?;
 
         if !success {
             anyhow::bail!("Process launch failed");
         }
 
-        let output = result.get("output").and_then(|o| o.as_str())
+        let output = result
+            .get("output")
+            .and_then(|o| o.as_str())
             .ok_or_else(|| anyhow::anyhow!("No output field"))?;
 
         if !output.contains("process launch") {
@@ -200,10 +226,14 @@ impl ComprehensiveTestSuite {
     fn test_state_management(&mut self) -> Result<()> {
         let result = self.debug_command("debug_state", json!({}))?;
 
-        let state = result.get("state").and_then(|s| s.as_str())
+        let state = result
+            .get("state")
+            .and_then(|s| s.as_str())
             .ok_or_else(|| anyhow::anyhow!("No state field"))?;
 
-        let binary_path = result.get("binary_path").and_then(|b| b.as_str())
+        let binary_path = result
+            .get("binary_path")
+            .and_then(|b| b.as_str())
             .ok_or_else(|| anyhow::anyhow!("No binary_path field"))?;
 
         if !binary_path.contains("simple-counter") {
@@ -220,9 +250,12 @@ impl ComprehensiveTestSuite {
 
     fn test_error_handling(&mut self) -> Result<()> {
         // Test with nonexistent program
-        let result = self.debug_command("debug_run", json!({
-            "binary_path": "./nonexistent_program"
-        }));
+        let result = self.debug_command(
+            "debug_run",
+            json!({
+                "binary_path": "./nonexistent_program"
+            }),
+        );
 
         // Should fail gracefully
         if result.is_ok() {
@@ -234,16 +267,24 @@ impl ComprehensiveTestSuite {
 
     fn test_invalid_breakpoint(&mut self) -> Result<()> {
         // First load a program
-        self.debug_command("debug_run", json!({
-            "binary_path": "./examples/simple_counter"
-        }))?;
+        self.debug_command(
+            "debug_run",
+            json!({
+                "binary_path": "./examples/simple_counter"
+            }),
+        )?;
 
         // Try invalid breakpoint
-        let result = self.debug_command("debug_break", json!({
-            "location": "nonexistent_function"
-        }))?;
+        let result = self.debug_command(
+            "debug_break",
+            json!({
+                "location": "nonexistent_function"
+            }),
+        )?;
 
-        let output = result.get("output").and_then(|o| o.as_str())
+        let output = result
+            .get("output")
+            .and_then(|o| o.as_str())
             .ok_or_else(|| anyhow::anyhow!("No output field"))?;
 
         // Should show "no locations" warning
@@ -278,13 +319,16 @@ impl ComprehensiveTestSuite {
         test!("Process launch (not just continue)", test_process_launch);
         test!("State management and tracking", test_state_management);
         test!("Error handling for invalid inputs", test_error_handling);
-        test!("Invalid breakpoint graceful handling", test_invalid_breakpoint);
+        test!(
+            "Invalid breakpoint graceful handling",
+            test_invalid_breakpoint
+        );
 
         println!();
         println!("🏆 TEST RESULTS:");
         println!("   ✅ Passed: {}/{}", passed, total);
         println!("   ❌ Failed: {}/{}", total - passed, total);
-        
+
         if passed == total {
             println!("   🎉 ALL TESTS PASSED! Ferroscope functionality verified!");
             true
@@ -309,7 +353,7 @@ fn main() -> Result<()> {
         .args(&["build"])
         .current_dir("examples/simple_counter")
         .output()?;
-    
+
     if !build_output.status.success() {
         anyhow::bail!("Failed to build test program");
     }
