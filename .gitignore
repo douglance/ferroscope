@@ -1,0 +1,29 @@
+# Build artifacts
+/target/
+**/target/
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.log
+*.tmp
+
+# Python artifacts (if any)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Backup files
+*.bak
+*_backup.*

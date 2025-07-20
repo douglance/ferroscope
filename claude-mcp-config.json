@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "rust-debugger": {
+      "command": "ferroscope",
+      "args": [],
+      "env": {},
+      "description": "Rust debugging tools via LLDB/GDB"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+[package]
+name = "ferroscope"
+version = "0.1.0"
+edition = "2024"
+description = "MCP server for debugging Rust programs with GDB/LLDB"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/douglance/ferroscope"
+
+[[bin]]
+name = "ferroscope"
+path = "src/main.rs"
+
+[[bin]]
+name = "comprehensive-test"
+path = "comprehensive_test.rs"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde_json = "1.0"
+anyhow = "1.0"
+futures = "0.3"
