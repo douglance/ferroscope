@@ -1,6 +1,6 @@
 [package]
 name = "ferroscope"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "MCP server that enables AI assistants to debug Rust programs using LLDB and GDB"
 license = "MIT"
