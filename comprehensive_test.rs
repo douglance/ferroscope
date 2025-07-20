@@ -128,7 +128,7 @@ impl ComprehensiveTestSuite {
 
     fn test_program_loading(&mut self) -> Result<()> {
         let result = self.debug_command("debug_run", json!({
-            "binary_path": "./test_programs/simple_counter"
+            "binary_path": "./examples/simple_counter"
         }))?;
 
         let success = result.get("success").and_then(|s| s.as_bool())
@@ -235,7 +235,7 @@ impl ComprehensiveTestSuite {
     fn test_invalid_breakpoint(&mut self) -> Result<()> {
         // First load a program
         self.debug_command("debug_run", json!({
-            "binary_path": "./test_programs/simple_counter"
+            "binary_path": "./examples/simple_counter"
         }))?;
 
         // Try invalid breakpoint
@@ -307,7 +307,7 @@ fn main() -> Result<()> {
     println!("🔨 Building test programs...");
     let build_output = Command::new("cargo")
         .args(&["build"])
-        .current_dir("test_programs/simple_counter")
+        .current_dir("examples/simple_counter")
         .output()?;
     
     if !build_output.status.success() {
