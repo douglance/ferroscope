@@ -14,7 +14,6 @@ use std::process::{Command, Stdio};
  * 5. ✅ Error handling works properly
  * 6. ✅ Session management and cleanup
  */
-
 struct ComprehensiveTestSuite {
     server_process: std::process::Child,
     stdin: std::process::ChildStdin,
@@ -29,7 +28,7 @@ impl ComprehensiveTestSuite {
         println!();
 
         let mut server_process = Command::new("cargo")
-            .args(&["run", "--bin", "ferroscope"])
+            .args(["run", "--bin", "ferroscope"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -62,7 +61,7 @@ impl ComprehensiveTestSuite {
         let mut response_line = String::new();
         self.stdout.read_line(&mut response_line)?;
 
-        let response: Value = serde_json::from_str(&response_line.trim())?;
+        let response: Value = serde_json::from_str(response_line.trim())?;
         Ok(response)
     }
 
@@ -350,7 +349,7 @@ fn main() -> Result<()> {
     // Ensure test program is built
     println!("🔨 Building test programs...");
     let build_output = Command::new("cargo")
-        .args(&["build"])
+        .args(["build"])
         .current_dir("examples/simple_counter")
         .output()?;
 

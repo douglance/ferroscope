@@ -219,28 +219,31 @@ impl DebugServer {
         }
 
         // Command-specific completion detection
-        if command.starts_with("process launch") {
-            if line.contains("Process") && (line.contains("launched") || line.contains("stopped")) {
-                return true;
-            }
+        if command.starts_with("process launch")
+            && line.contains("Process")
+            && (line.contains("launched") || line.contains("stopped"))
+        {
+            return true;
         }
 
-        if command.starts_with("process continue") {
-            if line.contains("Process") && (line.contains("stopped") || line.contains("exited")) {
-                return true;
-            }
+        if command.starts_with("process continue")
+            && line.contains("Process")
+            && (line.contains("stopped") || line.contains("exited"))
+        {
+            return true;
         }
 
-        if command.starts_with("breakpoint set") {
-            if line.contains("Breakpoint") && line.contains(":") {
-                return true;
-            }
+        if command.starts_with("breakpoint set")
+            && line.contains("Breakpoint")
+            && line.contains(":")
+        {
+            return true;
         }
 
-        if command.starts_with("expression") || command.starts_with("frame variable") {
-            if line.contains("=") || line.contains("error:") {
-                return true;
-            }
+        if (command.starts_with("expression") || command.starts_with("frame variable"))
+            && (line.contains("=") || line.contains("error:"))
+        {
+            return true;
         }
 
         false
